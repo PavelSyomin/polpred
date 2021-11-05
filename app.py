@@ -7,9 +7,11 @@ import csv
 from dash.dependencies import Output, Input
 import pandas as pd
 import plotly.express as px
-from predictor import get_data
+from predictor import Predictor
 
 app = dash.Dash(__name__)
+
+P = Predictor()
 
 with open("stations.csv", "r") as f:
     reader = csv.reader(f)
@@ -22,15 +24,6 @@ with open("stations.csv", "r") as f:
         station = dl.CircleMarker(center=(lat, lon), id=f"station_{station_id}")
         stations.append(station)
 
-data = {}
-
-def request_data(station_id):
-    if station_id not in data:        
-        data[station_id] = get_data(station_id)
-    return data[station_id]
-
-plot = px.line(get_data(1), x="datetime", y="co")
-
 pollutant_options = {
     "co": {"label": "Оксид углерода (CO)", "value": "co"},
     "no": {"label": "Оксид азота (NO)", "value": "no"},
@@ -38,6 +31,8 @@ pollutant_options = {
     "pm25": {"label": "Пыль (PM25)", "value": "pm25"},
     "pm10": {"label": "Пыль (PM10)", "value": "pm10"}
     }
+
+plot = px.line()
 
 app.layout = html.Div(children=[
     html.H1(children='Прогноз загрязнения воздуха в Москве'),
@@ -57,9 +52,12 @@ app.layout = html.Div(children=[
                                         {"label": "Марьино", "value": 10}
                                         ],
                                     value=1)]),
+                            dcc.Dropdown(id="date",
+                                         options=[],
+                                         value=""),
                             dcc.Dropdown(id="pollutant",
-                                         options=list(pollutant_options.values()),
-                                         value="co"
+                                         options=[],
+                                         value=""
                                          ),
                                          
 
@@ -84,26 +82,34 @@ def change_color(click_lat_lng):
 @app.callback(
     Output(component_id="station_plot", component_property="figure"),
     Input(component_id="station", component_property="value"),
+    Input(component_id="date", component_property="value"),
     Input(component_id="pollutant", component_property="value")
     )
-def update_plot(station_id, pollutant):
-    df = request_data(station_id)
+def update_plot(station_id, date, pollutant):
+    df = P.get_data(station_id, date)
     plot = px.line(df, x="datetime", y=pollutant)
     return plot
 
 @app.callback(
-    Output(component_id="pollutant", component_property="options"),
+    Output(component_id="date", component_property="options"),
+    Output(component_id="date", component_property="value"),
     Input(component_id="station", component_property="value")
     )
-def get_pollutants_for_station(station_id):
-    df = request_data(station_id)
-    cols = df.columns
-    options = []
-    for col in cols:
-        option = pollutant_options.get(col)
-        if option is not None:
-            options.append(option)
-    return options
+def get_dates_for_station(station_id):
+    options = P.get_date_options(station_id)
+    default_value = options[0]["value"]
+    return options, default_value
+
+@app.callback(
+    Output(component_id="pollutant", component_property="options"),
+    Output(component_id="pollutant", component_property="value"),
+    Input(component_id="station", component_property="value"),
+    Input(component_id="date", component_property="value"),
+    )
+def get_pollutants_for_station(station_id, date):
+    options = P.get_pollutant_options(station_id, date)
+    default_value = options[0]["value"]
+    return options, default_value
     
 '''@app.callback(
     Output(component_id="map", component_property="center"),
