@@ -41,7 +41,7 @@ app.layout = html.Div(children=[
                        dcc.Dropdown(id="station",
                                     options=[
                                         {"label": "Туристская", "value": 1},
-                                        {"label": "Коптевский бул", "value": 2},
+                                        {"label": "Коптевский бульвар", "value": 2},
                                         {"label": "Останкино 0", "value": 3},
                                         {"label": "Глебовская", "value": 4},
                                         {"label": "Спиридоновка", "value": 5},

@@ -1,6 +1,7 @@
 import re
 import json
 import pandas as pd
+import os
 from os.path import isfile
 from numpy import nan
 from urllib.request import urlopen
@@ -76,33 +77,44 @@ class Predictor():
         
         self.mapping = {
         "pol_data": {
-            1: "https://mosecom.mos.ru/turistskaya/",
-            2: "https://mosecom.mos.ru/koptevskij/",
-            3: "https://mosecom.mos.ru/ostankino-0/",
-            4: "https://mosecom.mos.ru/glebovskaya/",
-            5: "https://mosecom.mos.ru/spiridonovka/",
-            6: "https://mosecom.mos.ru/shabolovka/",
-            7: "https://mosecom.mos.ru/akademika-anoxina/",
-            8: "https://mosecom.mos.ru/butlerova/",
-            9: "https://mosecom.mos.ru/proletarskij-prospekt/",
-            10: "https://mosecom.mos.ru/marino/"
+                1: "https://mosecom.mos.ru/turistskaya/",
+                2: "https://mosecom.mos.ru/koptevskij/",
+                3: "https://mosecom.mos.ru/ostankino-0/",
+                4: "https://mosecom.mos.ru/glebovskaya/",
+                5: "https://mosecom.mos.ru/spiridonovka/",
+                6: "https://mosecom.mos.ru/shabolovka/",
+                7: "https://mosecom.mos.ru/akademika-anoxina/",
+                8: "https://mosecom.mos.ru/butlerova/",
+                9: "https://mosecom.mos.ru/proletarskij-prospekt/",
+                10: "https://mosecom.mos.ru/marino/"
             },
         "weather_data": {
-            1: {"lat": 55.856324, "lon": 37.426628},
-            2: {"lat": 55.833222, "lon": 37.525158},
-            3: {"lat": 55.821154, "lon": 37.612592},
-            4: {"lat": 55.811801, "lon": 37.71249},
-            5: {"lat": 55.759354, "lon": 37.595584},
-            6: {"lat": 55.715698, "lon": 37.6052377},
-            7: {"lat": 55.658163, "lon": 37.471434},
-            8: {"lat": 55.649412, "lon": 37.535874},
-            9: {"lat": 55.635129, "lon": 37.658684},
-            10: {"lat": 55.652695, "lon": 37.751502}
-    
+                1: {"lat": 55.856324, "lon": 37.426628},
+                2: {"lat": 55.833222, "lon": 37.525158},
+                3: {"lat": 55.821154, "lon": 37.612592},
+                4: {"lat": 55.811801, "lon": 37.71249},
+                5: {"lat": 55.759354, "lon": 37.595584},
+                6: {"lat": 55.715698, "lon": 37.6052377},
+                7: {"lat": 55.658163, "lon": 37.471434},
+                8: {"lat": 55.649412, "lon": 37.535874},
+                9: {"lat": 55.635129, "lon": 37.658684},
+                10: {"lat": 55.652695, "lon": 37.751502}    
+            },
+        "historical_data": {
+                1: "Туристская/",
+                2: "Коптевский.xlsx",
+                3: "Останкино 0/",
+                4: "Глебовская.xls",
+                5: "Спиридоновка/",
+                6: "Шаболовка/",
+                7: "Академика Анохина/",
+                8: "Бутлерова/",
+                9: "Пролетарский проспект/",
+                10: "Марьино/"
             }
         }
         
-        self.offline_history_data_path = "historical_data/"
+        self.historical_data_path = "historical_data/"
         
         self.supported_pollutants = {
             "co": {"label": "Оксид углерода (CO)", "value": "co"},
@@ -269,9 +281,91 @@ class Predictor():
 
         result = pd.DataFrame(station_weather_hist)
         return result
+    
+    
+    def load_meteoprofiles(self):
+        profiles_dir = self.historical_data_path + "mtp5_200_2/"
+
+        daily_tables = {}
+
+        for filename in os.scandir(profiles_dir):
+            daily_table = pd.read_table(filename.path, skiprows=19, decimal=",")
+            date = filename.name[4:12]
+            daily_tables[date] = daily_table
+            
+        ost_profile_data = pd.concat(daily_tables)
+        ost_profile_data["data time"] = pd.to_datetime(ost_profile_data["data time"], format="%d/%m/%Y %H:%M:%S")
+        ost_profile_data.drop("Quality", axis=1, inplace = True)
+        ost_profile_data.rename({
+            "data time": "datetime",
+            "0": "t_0m",
+            "50": "t_50m",
+            "100": "t_100m",
+            "150": "t_150m",
+            "200": "t_200m",
+            "250": "t_250m",
+            "300": "t_300m",
+            "350": "t_350m",
+            "400": "t_400m",
+            "450": "t_450m",
+            "500": "t_500m",
+            "550": "t_550m",
+            "600": "t_600m",
+            "OutsideTemperature": "outside_temperature"
+        }, axis=1, inplace =True)
+        ost_profile_data.reset_index(drop=True, inplace=True)
+        ost_profile_data = ost_profile_data.resample("1h", on="datetime").mean().reset_index()
+        
+        ost_253_meteo_path = self.historical_data_path + "Ветер Останкино 253.xlsx"
+        ost_253_meteo = pd.read_excel(ost_253_meteo_path, sheet_name=None, skiprows=1, names=["datetime", "253_wind_direction", "253_wind_speed"])
+        ost_253_meteo = pd.concat(ost_253_meteo)
+        ost_253_meteo["datetime"] = pd.to_datetime(ost_253_meteo["datetime"], format="%d/%m/%Y %H:%M")
+        ost_253_meteo = ost_253_meteo.resample("1h", on="datetime").mean().reset_index()
+        
+        ost_data = pd.merge(ost_profile_data, ost_253_meteo, how="inner", on="datetime")
+        
+        return ost_data
+    
+    
+    def load_historical_data(self, station_id):
+        
+        path = self.historical_data_path + self.mapping["historical_data"][station_id]
+        
+        if ".xls" in path:
+            sheets = pd.read_excel(path, sheet_name=None)
+            dataframe = pd.concat(sheets)
+            dataframe["Дата и время"] = pd.to_datetime(dataframe["Дата и время"], format="%d/%m/%Y %H:%M")
+        else:
+            dataframe = pd.read_excel(path + "all_data.xlsx")        
+        
+        dataframe = dataframe.loc[:, [name for name in dataframe.columns if "Unnamed" not in name]]
+        dataframe.dropna(axis=1, how="all", inplace=True)
+        dataframe.rename({
+            "Дата и время": "datetime",
+            "CO": "co",
+            "NO2": "no2",
+            "NO": "no",
+            "PM10": "pm10",
+            "PM2.5": "pm25",
+            "-T-": "temperature",
+            "| V |": "wind_speed",
+            "_V_": "wind_direction",
+            "Давление": "pressure",
+            "Влажность": "humidity",
+            "Осадки": "precipitation"
+        }, axis=1, inplace=True)
+        dataframe.reset_index(drop=True, inplace=True)
+        dataframe = dataframe.resample("1h", on="datetime").mean()
+        
+        ost_data = self.load_meteoprofiles()
+        dataframe = pd.merge(dataframe, ost_data, how="inner", on="datetime")
+        
+        print(dataframe.head())
+        
+        return dataframe
 
 
-    def generate_features(self, data):
+    def generate_features(self, data, date="now"):
         # Split by pollutant
         pollutants = ["co", "no2", "no", "pm10", "pm25"]
 
@@ -314,15 +408,17 @@ class Predictor():
                     col_value = table[feature].shift(-timeshift)
                     table[col_name] = col_value
             
-
-            
-            # Leave only row with current state
-            current_row_datetime = datetime.now(tz=timezone(timedelta(hours=3), name="Europe/Moscow")).strftime("%Y/%m/%d %H:00:00")
+            # Leave only row with the necessary date
+            if date == "now":
+                current_row_datetime = datetime.now(tz=timezone(timedelta(hours=3), name="Europe/Moscow")).strftime("%Y/%m/%d %H:00:00")
+            else:
+                current_row_datetime = (datetime.fromisoformat(date) - timedelta(hours=1)).strftime("%Y/%m/%d %H:00:00")
+            print(current_row_datetime)
             now = pd.to_datetime(current_row_datetime)
-            row = table.loc[table.index == current_row_datetime]
+            row = table.loc[table.index == now]
             
             features[pollutant_name] = row
-        
+        print(features)
         return features
 
 
@@ -359,15 +455,18 @@ class Predictor():
             return None
         
         if self.cache.get(station_number).get(date) is None:
+            print("No item in the cache")
             if date == "now":        
                 current_data = self.get_external_data(station_number)
-                features = self.generate_features(current_data)
-                forecast_data = self.get_predictions(station_number, features)
-                result = self.join_history_and_forecast(current_data, forecast_data)
-                return result
             else:
-                print("Not supported yet")
+                current_data = self.load_historical_data(station_number)
+        
+        features = self.generate_features(current_data, date=date)
+        forecast_data = self.get_predictions(station_number, features)
+        result = self.join_history_and_forecast(current_data, forecast_data)
+        
+        self.cache[station_number][date] = result
         
         return self.cache[station_number][date] 
 
-            
+print(Predictor().get_data(1, "2021-01-15").head())
