@@ -123,6 +123,19 @@ class Predictor():
             "pm25": {"label": "Пыль (PM25)", "value": "pm25"},
             "pm10": {"label": "Пыль (PM10)", "value": "pm10"}
         }
+        
+        self.station_names = [
+            {"label": "Туристская", "value": 1},
+            {"label": "Коптевский бульвар", "value": 2},
+            {"label": "Останкино 0", "value": 3},
+            {"label": "Глебовская", "value": 4},
+            {"label": "Спиридоновка", "value": 5},
+            {"label": "Шаболовка", "value": 6},
+            {"label": "Академика Анохина", "value": 7},
+            {"label": "Бутлерова", "value": 8},
+            {"label": "Пролетарский проспект", "value": 9},
+            {"label": "Марьино", "value": 10}
+            ]
     
         self.cache = {n: {} for n in range(1, 11)}
         
@@ -327,7 +340,7 @@ class Predictor():
         return ost_data
     
     
-    def load_historical_data(self, station_id):
+    def load_historical_data(self, station_id, date):
         
         path = self.historical_data_path + self.mapping["historical_data"][station_id]
         
@@ -360,8 +373,10 @@ class Predictor():
         ost_data = self.load_meteoprofiles()
         dataframe = pd.merge(dataframe, ost_data, how="inner", on="datetime")
         
-        print(dataframe.head())
-        
+        start_date = datetime.fromisoformat(date) - timedelta(days=1, hours=12)
+        end_date = datetime.fromisoformat(date) + timedelta(days=1)
+        dataframe = dataframe.loc[(dataframe["datetime"] >= start_date) & (dataframe["datetime"] <= end_date)]
+                
         return dataframe
 
 
@@ -413,12 +428,10 @@ class Predictor():
                 current_row_datetime = datetime.now(tz=timezone(timedelta(hours=3), name="Europe/Moscow")).strftime("%Y/%m/%d %H:00:00")
             else:
                 current_row_datetime = (datetime.fromisoformat(date) - timedelta(hours=1)).strftime("%Y/%m/%d %H:00:00")
-            print(current_row_datetime)
-            now = pd.to_datetime(current_row_datetime)
-            row = table.loc[table.index == now]
+            row = table.loc[table.index == current_row_datetime]
             
             features[pollutant_name] = row
-        print(features)
+            
         return features
 
 
@@ -436,8 +449,7 @@ class Predictor():
             prediction[prediction < 0] = 0.0
             predictions[pollutant_name] = prediction[0]
         result = pd.DataFrame(predictions)
-        result.insert(0, "datetime", pd.date_range(now, periods = result.shape[0], freq="1h"))
-        result = result.round({"co": 2, "no": 4, "no2": 4, "pm25": 4, "pm10": 4})
+        result.insert(0, "datetime", pd.date_range((now + pd.Timedelta("1h")), periods = result.shape[0], freq="1h"))
         return result
 
 
@@ -445,7 +457,10 @@ class Predictor():
         col_names = forecast_data.columns
         first_forecast_datetime = forecast_data.iat[0, 0]
         current_pollution_data = current_data.loc[current_data["datetime"] < first_forecast_datetime, col_names]
+        current_pollution_data["value_type"] = "fact"
+        forecast_data["value_type"] = "forecast"
         result = current_pollution_data.append(forecast_data).reset_index(drop=True)
+        result = result.round({"co": 2, "no": 4, "no2": 4, "pm25": 4, "pm10": 4})
         return result
 
 
@@ -455,18 +470,15 @@ class Predictor():
             return None
         
         if self.cache.get(station_number).get(date) is None:
-            print("No item in the cache")
             if date == "now":        
                 current_data = self.get_external_data(station_number)
             else:
-                current_data = self.load_historical_data(station_number)
+                current_data = self.load_historical_data(station_number, date)
         
-        features = self.generate_features(current_data, date=date)
-        forecast_data = self.get_predictions(station_number, features)
-        result = self.join_history_and_forecast(current_data, forecast_data)
-        
-        self.cache[station_number][date] = result
+            features = self.generate_features(current_data, date=date)
+            forecast_data = self.get_predictions(station_number, features)
+            result = self.join_history_and_forecast(current_data, forecast_data)
+            
+            self.cache[station_number][date] = result
         
         return self.cache[station_number][date] 
-
-print(Predictor().get_data(1, "2021-01-15").head())
