@@ -87,6 +87,7 @@ class Cache():
     
     def add(self, key, value, lifetime=0):        
         # Lifetime is in seconds
+        print(lifetime)
         if lifetime != 0:
             expire_time = datetime.now() + timedelta(seconds=lifetime)
         else:
@@ -107,10 +108,14 @@ class Cache():
         now = datetime.now()
         
         if key in self.data:
-            expires = self.data[key]["expires"]        
+            expires = self.data[key]["expires"]
+            print(expires)
             if expires > now:
+                print(key, "is up-to-date")
                 return False
-        
+        else:
+            print(key, "not present")
+            
         return True
     
     def dump(self):
@@ -200,7 +205,10 @@ class Predictor():
     def get_pollutant_options(self, station_number, date):
         key = f"{station_number}_{date}"
         if self.cache.expired(key):
-            self.cache.add(key, self.get_data(station_number, date), 3600)
+            lifetime = 0
+            if date == "now":
+                lifetime = 3600
+            self.cache.add(key, self.get_data(station_number, date), lifetime)
         dataframe = self.cache.get(key)
         cols = dataframe.columns
         options = []
@@ -500,8 +508,9 @@ class Predictor():
         col_names = forecast_data.columns
         first_forecast_datetime = forecast_data.iat[0, 0]
         current_pollution_data = current_data.loc[current_data["datetime"] < first_forecast_datetime, col_names]
-        current_pollution_data["value_type"] = "fact"
-        forecast_data["value_type"] = "forecast"
+        current_pollution_data = current_pollution_data.append(forecast_data.iloc[0,])
+        current_pollution_data["value_type"] = "Факт"
+        forecast_data["value_type"] = "Прогноз"
         result = current_pollution_data.append(forecast_data).reset_index(drop=True)
         result = result.round({"co": 2, "no": 4, "no2": 4, "pm25": 4, "pm10": 4})
         return result
@@ -514,6 +523,7 @@ class Predictor():
         
         key = f"{station_number}_{date}"
         if self.cache.expired(key):
+            print(key, "expired")
             if date == "now":        
                 current_data = self.get_external_data(station_number)
             else:

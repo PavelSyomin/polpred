@@ -31,11 +31,11 @@ with open("stations.csv", "r") as f:
 plot = px.line()
 
 app.layout = html.Div(children=[
-    html.Div(children=[html.H1("4 Virtual.env", style={"font-size": 28, "font-weight": "bold", "color": "#fff", "margin-left": 52}),
+    html.Div(children=[html.H1("4 Virtual.env", style={"font-size": 28, "font-weight": "bold", "color": "#fff", "margin": "0 0 5px 15px"}),
                        html.P("Прогноз загрязнения воздуха в Москве",
-                              style={"font-size": 28, "color": "#fff", "margin-left": 30, "line-height": "1.2"})], className="d-flex w-100", style={
+                              style={"font-size": 24, "color": "#fff", "margin": "0 0 5px 30px", "line-height": "1.2"})], className="d-flex w-100 align-items-end", style={
     "height": "7vh",
-    "background-image": "linear-gradient(to right, #EC0E43, #0000A8)",}),
+    "background-image": "linear-gradient(to right, #EC0E43, #0000A8)"}),
     html.Div(children=[
     html.Div(children=[
     html.Div(children=[html.Label("Станция мониторинга", className="mt-4"),
@@ -68,7 +68,8 @@ app.layout = html.Div(children=[
                                          value="",
                                          clearable=False,
                                          searchable=False
-                                        )], className="col-3"),
+                                        ),
+                            html.Div(children=[], id="station_info")], className="col-3"),
                                          
     html.Div(children=[
     dl.Map([dl.TileLayer(),
@@ -81,7 +82,7 @@ app.layout = html.Div(children=[
            id="map"),
     dcc.Graph(id="station_plot",
               figure=plot,
-              style={"position": "absolute", "bottom": 0, "z-index": "1000", "width": "100%", "height": "40%", "padding": "15px"})
+              style={"position": "absolute", "bottom": 0, "z-index": "1000", "width": "100%", "height": "40%", "padding": "5px"})
 ], className="col-9 g-0", style={"height": "93vh", "position": "relative"})], className="row")
     
     ], className="container-fluid", style={"height": "100%"})])
@@ -124,15 +125,35 @@ def select_nearset_station(latlng):
 
 @app.callback(
     Output(component_id="station_plot", component_property="figure"),
+    Output(component_id="station_info", component_property="children"),
     Input(component_id="station", component_property="value"),
     Input(component_id="date", component_property="value"),
     Input(component_id="pollutant", component_property="value")
     )
-def update_plot(station_id, date, pollutant):
+def update_plot_and_info(station_id, date, pollutant):
     df = P.get_data(station_id, date)
-    station_name = stations[int(station_id)][2]
-    plot = px.line(df, x="datetime", y=pollutant, title=station_name)
-    return plot
+    station = stations[int(station_id)]
+    station_name = station[2]
+    station_coords = f"{station[0]} N, {station[1]} E"
+    current_row = df.loc[(df.value_type == "Прогноз") | (df.value_type == "forecast")].iloc[0]
+    current_values = ["Концентрация загрязнителей на ", html.Nobr(current_row.iat[0].strftime("%H:%M %d.%m.%Y")),
+        " (мг/м3):", html.Br()]
+    values_list = []
+    for pollutant_name in ["CO", "NO2", "NO", "PM25", "PM10"]:
+        key = pollutant_name.lower().replace(".", "")
+        value = current_row.get(key)
+        if value is not None:
+            values_list.append(html.Li(f"{pollutant_name} — {value}"))
+    current_values.append(html.Ul(children=values_list))
+    plot = px.line(df, x="datetime", y=pollutant, color="value_type",
+                   labels={"datetime": "Дата и время", pollutant: f"{pollutant.upper()}, мг/м3",
+                           "value_type": "Значение"},
+                   color_discrete_map={"fact": "#EC0E43", "forecast": "#0000A8",
+                                       "Факт": "#EC0E43", "Прогноз": "#0000A8"})
+    info = [html.H3(children=station_name, className="mt-5"),
+            html.P(children=station_coords, className="fst-italic"),
+            html.P(children=current_values)]
+    return plot, info
 
 @app.callback(
     Output(component_id="date", component_property="options"),
