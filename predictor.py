@@ -2,6 +2,7 @@ import re
 import json
 import pandas as pd
 import os
+import pickle
 from os.path import isfile
 from numpy import nan
 from urllib.request import urlopen
@@ -67,6 +68,59 @@ class MeteoprofileHTMLParser(HTMLParser):
         result["253_wind_speed"] = nan
         
         return result
+
+class Cache():
+    
+    def __init__(self):
+        
+        self.cache_filename = "app_cache"
+        
+        self.data = {}
+        
+        if isfile(self.cache_filename):
+            with open(self.cache_filename, "rb") as f:
+                try:
+                    self.data = pickle.load(f)
+                except BaseException:
+                    print("Failed to load cache")
+                    
+    
+    def add(self, key, value, lifetime=0):        
+        # Lifetime is in seconds
+        if lifetime != 0:
+            expire_time = datetime.now() + timedelta(seconds=lifetime)
+        else:
+            expire_time = datetime.now() + timedelta(days=3650)
+        
+        self.data[key] = {"value": value, "expires": expire_time}
+        self.dump()
+    
+    
+    def get(self, key):
+        if key not in self.data:
+            return None
+        return self.data[key]["value"]
+    
+    
+    def expired(self, key):
+        
+        now = datetime.now()
+        
+        if key in self.data:
+            expires = self.data[key]["expires"]        
+            if expires > now:
+                return False
+        
+        return True
+    
+    def dump(self):
+        with open(self.cache_filename, "wb") as f:
+            pickle.dump(self.data, f)
+    
+    
+    def clear(self):
+        self.data = {}
+        self.dump()
 
 
 class Predictor():
@@ -134,8 +188,8 @@ class Predictor():
                                     "2021-07-13", "2021-07-14", "2021-07-27",
                                     "2021-09-13", "2021-09-21"
                                     ]]
-    
-        self.cache = {n: {} for n in range(1, 11)}
+        
+        self.cache = Cache()
         
     def get_date_options(self, station_number):
         options = self.available_dates
@@ -144,9 +198,10 @@ class Predictor():
         return options
     
     def get_pollutant_options(self, station_number, date):
-        if self.cache[station_number].get(date) is None:
-            self.cache[station_number][date] = self.get_data(station_number, date)
-        dataframe = self.cache[station_number][date]
+        key = f"{station_number}_{date}"
+        if self.cache.expired(key):
+            self.cache.add(key, self.get_data(station_number, date), 3600)
+        dataframe = self.cache.get(key)
         cols = dataframe.columns
         options = []
         for col in cols:
@@ -157,7 +212,12 @@ class Predictor():
     def get_external_data(self, station_number):
         pollution_data = self.fetch_pollution_data(station_number)
         pollution_dataframe = self.pollution_data_to_dataframe(pollution_data)
-        meteoprofile_dataframe = MeteoprofileHTMLParser().get_data()
+        
+        if self.cache.expired("meteoprofile"):
+            meteoprofile_dataframe = MeteoprofileHTMLParser().get_data()
+            self.cache.add("meteoprofile", meteoprofile_dataframe, 3600)
+        else:
+            meteoprofile_dataframe = self.cache.get("meteoprofile")
         mp_dataframe = pollution_dataframe.merge(meteoprofile_dataframe, how="left", on="datetime")
         weather_dataframe = self.get_weather_data(station_number)
         data = weather_dataframe.merge(mp_dataframe, how="left", on="datetime")
@@ -452,7 +512,8 @@ class Predictor():
             print("Station number must be between 1 and 10.")
             return None
         
-        if self.cache.get(station_number).get(date) is None:
+        key = f"{station_number}_{date}"
+        if self.cache.expired(key):
             if date == "now":        
                 current_data = self.get_external_data(station_number)
             else:
@@ -462,6 +523,10 @@ class Predictor():
             forecast_data = self.get_predictions(station_number, features)
             result = self.join_history_and_forecast(current_data, forecast_data)
             
-            self.cache[station_number][date] = result
+            if date == "now":
+                lifetime = 3600
+            else:
+                lifetime = 0
+            self.cache.add(key, result, lifetime)
         
-        return self.cache[station_number][date] 
+        return self.cache.get(key)
