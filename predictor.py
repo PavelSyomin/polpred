@@ -99,18 +99,6 @@ class Predictor():
                 8: {"lat": 55.649412, "lon": 37.535874},
                 9: {"lat": 55.635129, "lon": 37.658684},
                 10: {"lat": 55.652695, "lon": 37.751502}    
-            },
-        "historical_data": {
-                1: "Туристская/",
-                2: "Коптевский.xlsx",
-                3: "Останкино 0/",
-                4: "Глебовская.xls",
-                5: "Спиридоновка/",
-                6: "Шаболовка/",
-                7: "Академика Анохина/",
-                8: "Бутлерова/",
-                9: "Пролетарский проспект/",
-                10: "Марьино/"
             }
         }
         
@@ -136,24 +124,23 @@ class Predictor():
             {"label": "Пролетарский проспект", "value": 9},
             {"label": "Марьино", "value": 10}
             ]
-    
-        self.cache = {n: {} for n in range(1, 11)}
         
-    def get_date_options(self, station_number):
-        options = [{"label": "Сейчас", "value": "now"}]
-        available_history_dates = [{"label": date.fromisoformat(value).strftime("%d.%m.%Y"), "value": value}
+        self.available_dates = [{"label": "Сейчас", "value": "now"}] +\
+                               [{"label": date.fromisoformat(value).strftime("%d.%m.%Y"), "value": value}
                                    for value in
                                    [
                                     "2021-01-15", "2021-01-18", "2021-01-19",
                                     "2021-04-09", "2021-04-13",
                                     "2021-07-13", "2021-07-14", "2021-07-27",
                                     "2021-09-13", "2021-09-21"
-                                    ]
-        ]
+                                    ]]
+    
+        self.cache = {n: {} for n in range(1, 11)}
+        
+    def get_date_options(self, station_number):
+        options = self.available_dates
         if station_number == 10:
-            options.extend(available_history_dates[:-1])
-        else:
-            options.extend(available_history_dates)
+            return options[:-1]
         return options
     
     def get_pollutant_options(self, station_number, date):
@@ -342,14 +329,10 @@ class Predictor():
     
     def load_historical_data(self, station_id, date):
         
-        path = self.historical_data_path + self.mapping["historical_data"][station_id]
+        path = self.historical_data_path + f"{station_id}.csv"
         
-        if ".xls" in path:
-            sheets = pd.read_excel(path, sheet_name=None)
-            dataframe = pd.concat(sheets)
-            dataframe["Дата и время"] = pd.to_datetime(dataframe["Дата и время"], format="%d/%m/%Y %H:%M")
-        else:
-            dataframe = pd.read_excel(path + "all_data.xlsx")        
+        dataframe = pd.read_csv(path)
+        dataframe["Дата и время"] = pd.to_datetime(dataframe["Дата и время"], format="%d.%m.%Y %H:%M")   
         
         dataframe = dataframe.loc[:, [name for name in dataframe.columns if "Unnamed" not in name]]
         dataframe.dropna(axis=1, how="all", inplace=True)

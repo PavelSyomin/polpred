@@ -17,19 +17,23 @@ P = Predictor()
 
 with open("stations.csv", "r") as f:
     reader = csv.reader(f)
-    stations = []
+    stations = {}
+    station_markers = []
     for row in reader:
-        station_id = row[0]
+        station_id = int(row[0])
         station_name = row[1]
         lat = float(row[2])
         lon = float(row[3])
-        station = dl.CircleMarker(center=(lat, lon), id=f"station_{station_id}")
-        stations.append(station)
+        station_marker = dl.CircleMarker(center=(lat, lon), id=f"station_{station_id}")
+        station_markers.append(station_marker)
+        stations[station_id] = (lat, lon, station_name)
 
 plot = px.line()
 
 app.layout = html.Div(children=[
-    html.Div(children=[html.H1("Virtual.env", style={"font-size": 40, "color": "#fff", "margin-left": 52})], className="d-flex w-100", style={
+    html.Div(children=[html.H1("4 Virtual.env", style={"font-size": 28, "font-weight": "bold", "color": "#fff", "margin-left": 52}),
+                       html.P("Прогноз загрязнения воздуха в Москве",
+                              style={"font-size": 28, "color": "#fff", "margin-left": 30, "line-height": "1.2"})], className="d-flex w-100", style={
     "height": "7vh",
     "background-image": "linear-gradient(to right, #EC0E43, #0000A8)",}),
     html.Div(children=[
@@ -68,8 +72,9 @@ app.layout = html.Div(children=[
                                          
     html.Div(children=[
     dl.Map([dl.TileLayer(),
-           *stations,
-           dl.FeatureGroup(id="user_click")],
+           *station_markers,
+           dl.FeatureGroup(id="user_click"),
+           dl.FeatureGroup(id="highlighted")],
            center=(55.752004, 37.617734),
            zoom=10,
            style={'width': '100%', 'height': '100%'},
@@ -102,6 +107,7 @@ def select_nearset_station(latlng):
     with open("stations.csv", "r") as f:
         reader = csv.reader(f)
         nearest_station = 0
+        nearest_station_coords = (0, 0)
         min_distance = 1000
         for row in reader:
             station_id = int(row[0])
@@ -111,6 +117,9 @@ def select_nearset_station(latlng):
             if distance < min_distance:
                 min_distance = distance
                 nearest_station = station_id
+                nearest_station_coords = (lat, lon)
+    highlighted_marker = dl.CircleMarker(center=nearest_station_coords, color="#EC0E43")
+    zoom = 13
     return nearest_station
 
 @app.callback(
@@ -121,7 +130,8 @@ def select_nearset_station(latlng):
     )
 def update_plot(station_id, date, pollutant):
     df = P.get_data(station_id, date)
-    plot = px.line(df, x="datetime", y=pollutant)
+    station_name = stations[int(station_id)][2]
+    plot = px.line(df, x="datetime", y=pollutant, title=station_name)
     return plot
 
 @app.callback(
@@ -144,6 +154,23 @@ def get_pollutants_for_station(station_id, date):
     options = P.get_pollutant_options(station_id, date)
     default_value = options[0]["value"]
     return options, default_value
+
+@app.callback(
+    Output(component_id="highlighted", component_property="children"),
+    Output(component_id="map", component_property="zoom"),
+    Output(component_id="map", component_property="center"),
+    Input(component_id="station", component_property="value"),
+    Input(component_id="map", component_property="click_lat_lng"),
+    prevent_initial_call=True
+    )
+def zoom_move_hightlight(station_id, latlng):
+    station = stations[int(station_id)]
+    click_lat = station[0]
+    click_lon = station[1]
+    nearest_station_coords = (click_lat, click_lon)
+    highlighted_marker = dl.CircleMarker(center=nearest_station_coords, color="#EC0E43")
+    zoom = 13
+    return highlighted_marker, zoom, nearest_station_coords
     
 
     
