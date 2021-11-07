@@ -24,7 +24,7 @@ with open("stations.csv", "r") as f:
         station_name = row[1]
         lat = float(row[2])
         lon = float(row[3])
-        station_marker = dl.CircleMarker(center=(lat, lon), id=f"station_{station_id}")
+        station_marker = dl.CircleMarker(center=(lat, lon), id=f"station_{station_id}", color="#0000A8")
         station_markers.append(station_marker)
         stations[station_id] = (lat, lon, station_name)
 
@@ -119,7 +119,7 @@ def select_nearset_station(latlng):
                 min_distance = distance
                 nearest_station = station_id
                 nearest_station_coords = (lat, lon)
-    highlighted_marker = dl.CircleMarker(center=nearest_station_coords, color="#EC0E43")
+    highlighted_marker = dl.CircleMarker(center=nearest_station_coords, color="#EC0E43", fill=False)
     zoom = 13
     return nearest_station
 
@@ -149,7 +149,8 @@ def update_plot_and_info(station_id, date, pollutant):
                    labels={"datetime": "Дата и время", pollutant: f"{pollutant.upper()}, мг/м3",
                            "value_type": "Значение"},
                    color_discrete_map={"fact": "#EC0E43", "forecast": "#0000A8",
-                                       "Факт": "#EC0E43", "Прогноз": "#0000A8"})
+                                       "Факт": "#EC0E43", "Прогноз": "#0000A8",
+                                       "OpenWeatherMap": "#B470AD"})
     info = [html.H3(children=station_name, className="mt-5"),
             html.P(children=station_coords, className="fst-italic"),
             html.P(children=current_values)]
@@ -191,10 +192,8 @@ def zoom_move_hightlight(station_id, latlng):
     nearest_station_coords = (click_lat, click_lon)
     highlighted_marker = dl.CircleMarker(center=nearest_station_coords, color="#EC0E43")
     zoom = 13
-    return highlighted_marker, zoom, nearest_station_coords
-    
+    return highlighted_marker, zoom, nearest_station_coords    
 
-    
 
 if __name__ == '__main__':
     app.run_server(debug=True) 

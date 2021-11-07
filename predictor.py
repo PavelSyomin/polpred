@@ -203,13 +203,7 @@ class Predictor():
         return options
     
     def get_pollutant_options(self, station_number, date):
-        key = f"{station_number}_{date}"
-        if self.cache.expired(key):
-            lifetime = 0
-            if date == "now":
-                lifetime = 3600
-            self.cache.add(key, self.get_data(station_number, date), lifetime)
-        dataframe = self.cache.get(key)
+        dataframe = self.get_data(station_number, date)
         cols = dataframe.columns
         options = []
         for col in cols:
@@ -514,6 +508,71 @@ class Predictor():
         result = current_pollution_data.append(forecast_data).reset_index(drop=True)
         result = result.round({"co": 2, "no": 4, "no2": 4, "pm25": 4, "pm10": 4})
         return result
+    
+    
+    def get_owm_data(self, lat, lon, data_type="forecast", start=0, end=0):
+        if data_type == "forecast":
+            url = f"http://api.openweathermap.org/data/2.5/air_pollution/forecast?lat={lat}&lon={lon}&appid={self.owm_api_key}"
+        elif data_type == "current":
+            url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={self.owm_api_key}"
+        elif data_type == "history":
+            url = f"http://api.openweathermap.org/data/2.5/air_pollution/history?lat={lat}8&lon={lon}&start={start}&end={end}&appid={self.owm_api_key}"
+        else:
+            print("Unrecognized data type")
+            return None
+        
+        result_string = urlopen(url).read().decode()
+        
+        result = json.loads(result_string)
+        
+        results_dict = {"datetime": [],
+                    "co": [],
+                    "no": [],
+                    "no2": [],
+                    "pm25": [],
+                    "pm10": []}
+        for item in result["list"]:
+            components = item["components"]
+            # Convert from ug/m3 to mg/m3
+            co = components["co"] / 1000
+            no = components["no"] / 1000
+            no2 = components["no2"] / 1000
+            pm25 = components["pm2_5"] / 1000
+            pm10 = components["pm10"] / 1000
+            dt = datetime.fromtimestamp(item["dt"], tz=timezone(timedelta(hours=3), name="Europe/Moscow"))
+            results_dict["datetime"].append(dt)
+            results_dict["co"].append(co)
+            results_dict["no"].append(no)
+            results_dict["no2"].append(no2)
+            results_dict["pm25"].append(pm25)
+            results_dict["pm10"].append(pm10)
+        
+        dataframe = pd.DataFrame(results_dict)
+        return dataframe
+    
+    
+    def add_openweathermap_data(self, station_id, current_data):
+        station = self.mapping["weather_data"][station_id]
+        lat = station["lat"]
+        lon = station["lon"]
+        history_start_date = int(current_data.iat[0, 0].timestamp())
+        history_end_date = int(datetime.now().timestamp())
+        forecast_end_date = current_data.iat[-1, 0]
+        
+        owm_history = self.get_owm_data(lat, lon, "history", history_start_date, history_end_date)
+        owm_forecast = self.get_owm_data(lat, lon)
+        
+        owm_data = owm_history.append(owm_forecast)
+        
+        cols_to_keep = ["datetime"] + [name for name in ["co", "no", "no2", "pm25", "pm10"] if name in current_data.columns]
+        
+        owm_data = owm_data.loc[:, cols_to_keep]
+        owm_data["value_type"] = "OpenWeatherMap"
+        owm_data = owm_data.loc[owm_data["datetime"] <= forecast_end_date]
+        
+        result = current_data.append(owm_data)
+        
+        return result        
 
 
     def get_data(self, station_number, date="now"):
@@ -531,7 +590,11 @@ class Predictor():
         
             features = self.generate_features(current_data, date=date)
             forecast_data = self.get_predictions(station_number, features)
-            result = self.join_history_and_forecast(current_data, forecast_data)
+            our_data = self.join_history_and_forecast(current_data, forecast_data)
+            if date == "now":
+                result = self.add_openweathermap_data(station_number, our_data)
+            else:
+                result = our_data
             
             if date == "now":
                 lifetime = 3600
