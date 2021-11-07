@@ -87,7 +87,6 @@ class Cache():
     
     def add(self, key, value, lifetime=0):        
         # Lifetime is in seconds
-        print(lifetime)
         if lifetime != 0:
             expire_time = datetime.now() + timedelta(seconds=lifetime)
         else:
@@ -109,12 +108,8 @@ class Cache():
         
         if key in self.data:
             expires = self.data[key]["expires"]
-            print(expires)
             if expires > now:
-                print(key, "is up-to-date")
                 return False
-        else:
-            print(key, "not present")
             
         return True
     
@@ -195,6 +190,21 @@ class Predictor():
                                     ]]
         
         self.cache = Cache()
+        
+        self.preload_data()
+        
+    
+    def preload_data(self):
+        print("Preloading data, please wait…")
+        for station_id in range(1, 11):
+            for date_option in self.get_date_options(station_id):
+                date = date_option["value"]
+                try:
+                    self.get_data(station_id, date)
+                    print(f"Added data for station {station_id} on date {date}")
+                except BaseException:
+                    print(f"Failed to data for station {station_id} on date {date}")
+
         
     def get_date_options(self, station_number):
         options = self.available_dates
@@ -582,7 +592,6 @@ class Predictor():
         
         key = f"{station_number}_{date}"
         if self.cache.expired(key):
-            print(key, "expired")
             if date == "now":        
                 current_data = self.get_external_data(station_number)
             else:

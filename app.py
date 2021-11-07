@@ -31,12 +31,14 @@ with open("stations.csv", "r") as f:
 plot = px.line()
 
 app.layout = html.Div(children=[
-    html.Div(children=[html.H1("4 Virtual.env", style={"font-size": 28, "font-weight": "bold", "color": "#fff", "margin": "0 0 5px 15px"}),
-                       html.P("Прогноз загрязнения воздуха в Москве",
-                              style={"font-size": 24, "color": "#fff", "margin": "0 0 5px 30px", "line-height": "1.2"})], className="d-flex w-100 align-items-end", style={
-    "height": "7vh",
-    "background-image": "linear-gradient(to right, #EC0E43, #0000A8)"}),
     html.Div(children=[
+        html.Div(children=[
+            html.Div("4 Virtual.env", style={"font-size": 28, "font-weight": "bold", "color": "#fff"}, className="col-3"),
+            html.Div("Прогноз загрязнения воздуха в Москве", className="col-9",
+                    style={"font-size": 28, "color": "#fff", "line-height": "1.2"})], className="row align-items-baseline",
+            style={
+            "height": "7vh",
+            "background-image": "linear-gradient(to right, #EC0E43, #0000A8)"}),
     html.Div(children=[
     html.Div(children=[html.Label("Станция мониторинга", className="mt-4"),
                        dcc.Dropdown(id="station",
@@ -57,8 +59,8 @@ app.layout = html.Div(children=[
                                     clearable=False),
                             html.Label("Дата"),
                             dcc.Dropdown(id="date",
-                                         options=[{"label": "15.01.2021", "value": "2021-01-15"}],
-                                         value="2021-01-15",
+                                         options=[{"label": "Сейчас", "value": "now"}],
+                                         value="now",
                                          className="mb-3",
                                          clearable=False,
                                          searchable=False),
@@ -75,7 +77,7 @@ app.layout = html.Div(children=[
     dl.Map([dl.TileLayer(),
            *station_markers,
            dl.FeatureGroup(id="user_click"),
-           dl.FeatureGroup(id="highlighted")],
+           dl.FeatureGroup(children=[dl.CircleMarker(center=(55.856324, 37.426628), color="#EC0E43", fill=False)], id="highlighted")],
            center=(55.752004, 37.617734),
            zoom=10,
            style={'width': '100%', 'height': '100%'},
@@ -163,7 +165,7 @@ def update_plot_and_info(station_id, date, pollutant):
     )
 def get_dates_for_station(station_id):
     options = P.get_date_options(station_id)
-    default_value = options[1]["value"]
+    default_value = options[0]["value"]
     return options, default_value
 
 @app.callback(
