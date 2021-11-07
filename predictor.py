@@ -480,7 +480,7 @@ class Predictor():
             
             # Leave only row with the necessary date
             if date == "now":
-                current_row_datetime = datetime.now(tz=timezone(timedelta(hours=3), name="Europe/Moscow")).strftime("%Y/%m/%d %H:00:00")
+                current_row_datetime = pd.Timestamp(table.dropna(subset=["pollutant_concentration"]).index.to_pydatetime()[-1])
             else:
                 current_row_datetime = (datetime.fromisoformat(date) - timedelta(hours=1)).strftime("%Y/%m/%d %H:00:00")
             row = table.loc[table.index == current_row_datetime]

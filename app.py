@@ -137,7 +137,8 @@ def update_plot_and_info(station_id, date, pollutant):
     station = stations[int(station_id)]
     station_name = station[2]
     station_coords = f"{station[0]} N, {station[1]} E"
-    current_row = df.loc[(df.value_type == "Прогноз") | (df.value_type == "forecast")].iloc[0]
+    current_row = df.loc[(df.value_type == "Факт") | (df.value_type == "fact")].iloc[-2]
+    print(current_row)
     current_values = ["Концентрация загрязнителей на ", html.Nobr(current_row.iat[0].strftime("%H:%M %d.%m.%Y")),
         " (мг/м3):", html.Br()]
     values_list = []
